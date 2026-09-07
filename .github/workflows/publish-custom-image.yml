@@ -18,7 +18,6 @@ concurrency:
 
 env:
   PATCH_BRANCH: master
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/prowlarr
 
 jobs:
   publish:
@@ -41,6 +40,10 @@ jobs:
           git push --force-with-lease origin HEAD:${PATCH_BRANCH}
           test "$before" = "$(git rev-parse HEAD)" && changed=false || changed=true
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Lowercase image name
+        if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/prowlarr" >> "$GITHUB_ENV"
 
       - uses: docker/setup-qemu-action@v3
         if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
