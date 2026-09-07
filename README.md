@@ -1,3 +1,14 @@
+## About this fork
+
+The only difference from upstream Prowlarr is optional in-memory caching of search
+results, configurable under Settings → General. `master` is rebased onto upstream
+`master` daily, so everything else tracks upstream.
+
+Images are published to `ghcr.io/namyts/prowlarr`, tagged with the upstream release
+they are based on.
+
+---
+
 # Prowlarr
 
 [![Build Status](https://dev.azure.com/Prowlarr/Prowlarr/_apis/build/status/Prowlarr.Prowlarr?branchName=develop)](https://dev.azure.com/Prowlarr/Prowlarr/_build/latest?definitionId=1&branchName=develop)
