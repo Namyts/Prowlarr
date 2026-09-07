@@ -23,6 +23,7 @@ jobs:
       changed: ${{ steps.sync.outputs.changed }}
       sha: ${{ steps.sync.outputs.sha }}
       version: ${{ steps.sync.outputs.version }}
+      assembly_version: ${{ steps.sync.outputs.assembly_version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,9 +43,12 @@ jobs:
           test "$before" = "$(git rev-parse HEAD)" && changed=false || changed=true
           # Nearest upstream release tag plus how far master is ahead of it, e.g. v2.6.4.5611-12-gabcdef
           version=$(git describe --tags --match 'v*' --always HEAD)
+          # AssemblyVersion takes a numeric quad, so the app reports the release it is based on.
+          release=$(git describe --tags --match 'v*' --abbrev=0 HEAD)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "assembly_version=${release#v}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: sync
@@ -83,6 +87,10 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           provenance: false
+          build-args: |
+            PROWLARR_VERSION=${{ needs.sync.outputs.assembly_version }}
+            PACKAGE_VERSION=${{ needs.sync.outputs.version }}
+            PACKAGE_AUTHOR=[${{ github.repository_owner }}](${{ github.server_url }}/${{ github.repository }})
           tags: ${{ env.IMAGE_NAME }}:${{ needs.sync.outputs.version }}-${{ matrix.arch }}
 
       - name: Save image ref
