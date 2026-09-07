@@ -22,6 +22,7 @@ jobs:
     outputs:
       changed: ${{ steps.sync.outputs.changed }}
       sha: ${{ steps.sync.outputs.sha }}
+      version: ${{ steps.sync.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,12 +36,15 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git remote add upstream https://github.com/Prowlarr/Prowlarr.git
-          git fetch upstream master
+          git fetch --tags upstream master
           git rebase upstream/master
           git push --force-with-lease origin HEAD:master
           test "$before" = "$(git rev-parse HEAD)" && changed=false || changed=true
+          # Nearest upstream release tag plus how far master is ahead of it, e.g. v2.6.4.5611-12-gabcdef
+          version=$(git describe --tags --match 'v*' --always HEAD)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
     needs: sync
@@ -93,7 +97,7 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: build
+    needs: [sync, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -113,8 +117,12 @@ jobs:
       - name: Set image name
         run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/prowlarr" >> "$GITHUB_ENV"
 
-      - name: Tag digests as latest
+      - name: Tag digests
         working-directory: /tmp/digests
+        env:
+          VERSION: ${{ needs.sync.outputs.version }}
         run: |
-          docker buildx imagetools create -t "$IMAGE_NAME:latest" \
+          docker buildx imagetools create \
+            -t "$IMAGE_NAME:latest" \
+            -t "$IMAGE_NAME:$VERSION" \
             $(printf "$IMAGE_NAME@sha256:%s " *)
