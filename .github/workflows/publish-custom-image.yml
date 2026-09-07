@@ -56,7 +56,6 @@ jobs:
           - arch: amd64
             platform: linux/amd64
             runner: ubuntu-24.04
-          # Each arch builds on a runner of its own architecture; emulated builds take ~12x longer.
           # - arch: arm64
           #   platform: linux/arm64
           #   runner: ubuntu-24.04-arm
@@ -77,23 +76,24 @@ jobs:
       - name: Set image name
         run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/prowlarr" >> "$GITHUB_ENV"
 
-      - id: build
-        uses: docker/build-push-action@v6
+      # Each arch is pushed under its own tag.
+      - uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE_NAME }}:${{ needs.sync.outputs.version }}-${{ matrix.arch }}
 
-      - name: Save digest
+      - name: Save image ref
         run: |
-          digest='${{ steps.build.outputs.digest }}'
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${digest#sha256:}"
+          mkdir -p /tmp/refs
+          echo "$IMAGE_NAME:${{ needs.sync.outputs.version }}-${{ matrix.arch }}" > "/tmp/refs/${{ matrix.arch }}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ matrix.arch }}
-          path: /tmp/digests/*
+          name: ref-${{ matrix.arch }}
+          path: /tmp/refs/*
           retention-days: 1
 
   publish:
@@ -102,8 +102,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: /tmp/digests
-          pattern: digest-*
+          path: /tmp/refs
+          pattern: ref-*
           merge-multiple: true
 
       - uses: docker/setup-buildx-action@v3
@@ -117,12 +117,12 @@ jobs:
       - name: Set image name
         run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/prowlarr" >> "$GITHUB_ENV"
 
-      - name: Tag digests
-        working-directory: /tmp/digests
+      - name: Combine per-arch images into one manifest
+        working-directory: /tmp/refs
         env:
           VERSION: ${{ needs.sync.outputs.version }}
         run: |
           docker buildx imagetools create \
             -t "$IMAGE_NAME:latest" \
             -t "$IMAGE_NAME:$VERSION" \
-            $(printf "$IMAGE_NAME@sha256:%s " *)
+            $(cat *)
